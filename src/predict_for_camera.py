@@ -75,7 +75,7 @@ class image_segmentation:
         self.threshold_num = rospy.get_param('threshold_num',0.0)
         rospy.loginfo("threshold num :%s" % self.threshold_num)
 
-        self.chage_flag_srv = rospy.Service('/switch_segmentation',SetBool,self.callback_change_mode)
+        self.change_flag_srv = rospy.Service('/switch_segmentation',SetBool,self.callback_change_mode)
         self.change_threshold_flag = False
         self.change_mode_flag = False
 
@@ -114,10 +114,10 @@ class image_segmentation:
             self.model = self.model.eval()
 
     def thresholdCallback(self,data):
-        if data.data >= self.threshold_num:
+        if data.data <= self.threshold_num:
             self.change_threshold_flag = True
         else:
-            pass
+            self.change_threshold_flag = False
     
     def callback_change_mode(self, data):
         resp = SetBoolResponse()
