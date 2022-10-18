@@ -11,6 +11,10 @@
     <arg name="image_subscribe_topic"	    default="/camera/image_raw"/>
     <arg name="image_publish_topic"         default="Segmentation_image"/>
 
+    <!--change option-->
+    <arg name="alpha_topic"                 default="alpha"/>
+    <arg name="threshold_num"             default="0.0"/>
+
     <!-- Node -->
     <node name="Segmentation" pkg="deeplabv3_plus_pytorch_ros" type="predict_for_camera.py" output="screen" respawn="true">
         <param name="dataset"               value="$(arg dataset)"/>
@@ -20,6 +24,10 @@
         <param name="ckpt"                  value="$(arg ckpt)"/>
         <param name="image_subscribe_topic" value="$(arg image_subscribe_topic)"/>
         <param name="image_publish_topic"   value="$(arg image_publish_topic)"/>
+
+        <param name="alpha_topic"           value="$(arg alpha_topic)"/>
+        <param name="alpha_threshold"      value="$(arg alpha_threshold)"/>
+
 
     </node>
 </launch>

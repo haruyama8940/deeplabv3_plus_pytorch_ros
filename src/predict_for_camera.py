@@ -2,6 +2,7 @@
 # codding = utf-8
 
 # Python imports
+from re import S
 import numpy as np
 import cv2
 import os
@@ -15,6 +16,8 @@ import torch.nn as nn
 from torchvision import transforms as T
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
+from std_msgs.msg import Float32
+from std_srvs.srv import SetBool ,SetBoolRequest ,SetBoolResponse
 import network
 import utils
 from datasets import VOCSegmentation, Cityscapes, cityscapes
@@ -66,6 +69,16 @@ class image_segmentation:
         self.image_sub_topic = rospy.get_param('~image_subscribe_topic', '/camera/image_raw')
         self.image_sub = rospy.Subscriber(self.image_sub_topic, Image, self.segmentation)
 
+        #change topics
+        self.alpha_topic = rospy.get_param("~alpha_topic",'/alpha')
+        self.threshold_sub =rospy.Subscriber(self.alpha_topic,Float32,self.thresholdCallback)
+        self.threshold_num = rospy.get_param('threshold_num',0.0)
+        rospy.loginfo("threshold num :%s" % self.threshold_num)
+
+        self.chage_flag_srv = rospy.Service('/switch_segmentation',SetBool,self.callback_change_mode)
+        self.change_threshold_flag = False
+        self.change_mode_flag = False
+
         # Predict options
         if self.dataset.lower() == 'voc':
             self.num_classes = 21
@@ -100,36 +113,53 @@ class image_segmentation:
         with torch.no_grad():
             self.model = self.model.eval()
 
-    def segmentation(self, data):
-        if self.crop_val:
-            T.Compose([
-                T.Resize(self.crop_size),
-                T.CenterCrop(self.crop_size),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-            ])
+    def thresholdCallback(self,data):
+        if data.data >= self.threshold_num:
+            self.change_threshold_flag = True
         else:
-            transform = T.Compose([
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-            ])
+            pass
+    
+    def callback_change_mode(self, data):
+        resp = SetBoolResponse()
+        self.change_mode_flag = data.data
+        resp.message = "change_mode: " + str(self.learning)
+        resp.success = True
+        return resp
+    
+    def segmentation(self, data):
+        if self.change_mode_flag and self.change_threshold_flag:
+            print(self.change_mode_flag)
+            if self.crop_val:
+                T.Compose([
+                    T.Resize(self.crop_size),
+                    T.CenterCrop(self.crop_size),
+                    T.ToTensor(),
+                    T.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+                ])
+            else:
+                transform = T.Compose([
+                    T.ToTensor(),
+                    T.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+                ])
 
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
+            try:
+                cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            except CvBridgeError as e:
+                print(e)
 
-        cv_image = transform(cv_image).unsqueeze(0).to(self.device)
-        pred = self.model(cv_image)
-        pred = pred.max(1)[1].cpu().numpy()[0]
-        colorized_preds = self.decode_fn(pred).astype('uint8')
-        colorized_preds = cv2.cvtColor(np.asarray(colorized_preds), cv2.COLOR_RGB2BGR)
-        try:
-            self.image_pub.publish(self.bridge.cv2_to_imgmsg(colorized_preds, "bgr8"))
-        except CvBridgeError as e:
-            print(e)
+            cv_image = transform(cv_image).unsqueeze(0).to(self.device)
+            pred = self.model(cv_image)
+            pred = pred.max(1)[1].cpu().numpy()[0]
+            colorized_preds = self.decode_fn(pred).astype('uint8')
+            colorized_preds = cv2.cvtColor(np.asarray(colorized_preds), cv2.COLOR_RGB2BGR)
+            try:
+                self.image_pub.publish(self.bridge.cv2_to_imgmsg(colorized_preds, "bgr8"))
+            except CvBridgeError as e:
+                print(e)
+        else:
+            pass
 
 
 if __name__ == '__main__':
